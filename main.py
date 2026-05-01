@@ -1,5 +1,6 @@
 import re
-from astrbot.api.event import filter, AstrMessageEvent, EventMessageType
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.event.filter import EventMessageType   # 关键修正
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 
@@ -9,9 +10,9 @@ class ModerationPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
 
-    @filter.event_message_type(EventMessageType.ALL)
-    async def on_message(self, event: AstrMessageEvent) -> None:
-        # 获取插件配置（正确方式）
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)  # 监听群消息
+    async def on_message(self, event: AstrMessageEvent):
+        # 获取配置
         enabled = self.plugin_conf.get("enabled", True)
         if not enabled:
             return
@@ -20,21 +21,17 @@ class ModerationPlugin(Star):
         if not message_text or not message_text.strip():
             return
 
-        # 忽略机器人自己发送的消息
+        # 忽略机器人自己
         if self.plugin_conf.get("ignore_bot_self", True):
             if getattr(event.message_obj, "self_id", None) == event.get_sender_id():
                 return
 
-        # 只处理群聊消息
-        if not event.is_group_message():
-            return
-
-        # 忽略管理员消息
+        # 忽略管理员
         if self.plugin_conf.get("ignore_admin", True):
             if await self.is_admin(event):
                 return
 
-        # 获取当前会话的 LLM 提供者 ID
+        # 获取 LLM 提供者
         try:
             provider_id = await self.context.get_current_chat_provider_id(
                 umo=event.unified_msg_origin
@@ -43,7 +40,7 @@ class ModerationPlugin(Star):
             logger.error(f"获取 LLM Provider ID 失败: {e}")
             return
 
-        # 构造审核提示词
+        # 构造提示词
         prompt_template = self.plugin_conf.get(
             "moderation_prompt",
             "你是一个内容审核助手。请判断以下用户输入的消息是否包含违禁内容（如色情、暴力、政治敏感、辱骂、广告等）。"
@@ -51,25 +48,25 @@ class ModerationPlugin(Star):
         )
         prompt = prompt_template.format(message=message_text)
 
-        # 调用 LLM 模型进行审核
+        # 调用 LLM（兼容新旧版本）
         try:
-            # 注意：根据 AstrBot 版本，如果 self.context.llm_generate 不存在，可改成 self.context.ai.llm_generate
-            # 这里先使用标准写法，若报错请自行切换
-            llm_response = await self.context.llm_generate(
-                chat_provider_id=provider_id,
-                prompt=prompt,
-            )
-        except AttributeError:
-            # 兼容新版本写法
-            llm_response = await self.context.ai.llm_generate(
-                chat_provider_id=provider_id,
-                prompt=prompt,
-            )
+            # 尝试旧版接口
+            if hasattr(self.context, "llm_generate"):
+                llm_response = await self.context.llm_generate(
+                    chat_provider_id=provider_id,
+                    prompt=prompt,
+                )
+            else:
+                # 新版接口
+                llm_response = await self.context.ai.llm_generate(
+                    chat_provider_id=provider_id,
+                    prompt=prompt,
+                )
         except Exception as e:
             logger.error(f"LLM 调用失败: {e}")
             return
 
-        # 获取响应文本（兼容不同返回结构）
+        # 提取响应文本
         if hasattr(llm_response, "completion_text"):
             response_text = llm_response.completion_text.strip()
         elif hasattr(llm_response, "choices") and llm_response.choices:
@@ -77,13 +74,11 @@ class ModerationPlugin(Star):
         else:
             response_text = str(llm_response).strip()
 
-        # 解析 LLM 返回结果
-        is_violation = self._parse_violation_response(response_text)
-
-        if not is_violation:
+        # 判断违规
+        if not self._parse_violation_response(response_text):
             return
 
-        # ---- 违规处理 ----
+        # 违规处理
         logger.info(
             f"检测到违规消息 | 用户: {event.get_sender_name()} ({event.get_sender_id()}) | "
             f"群: {event.message_obj.group_id} | 内容: {message_text[:50]}..."
@@ -101,12 +96,10 @@ class ModerationPlugin(Star):
             )
 
     def _parse_violation_response(self, response_text: str) -> bool:
-        """解析 LLM 响应，判断是否违规"""
         match = re.search(r'\b(1|0)\b', response_text)
         return match is not None and match.group(1) == "1"
 
     async def _mute_user(self, event: AstrMessageEvent, duration: int) -> bool:
-        """执行禁言操作（OneBot 标准 API）"""
         try:
             group_id = event.message_obj.group_id
             user_id = event.get_sender_id()
@@ -122,23 +115,19 @@ class ModerationPlugin(Star):
                     "duration": duration,
                 },
             )
-            logger.info(f"已禁言用户 {user_id}，时长 {duration} 秒，API 响应: {result}")
+            logger.info(f"已禁言用户 {user_id}，时长 {duration} 秒")
             return True
         except Exception as e:
             logger.error(f"禁言用户失败: {e}")
             return False
 
-    async def _log_violation(
-        self, event: AstrMessageEvent, message_text: str, llm_response: str
-    ) -> None:
+    async def _log_violation(self, event, message_text, llm_response):
         logger.info(
             f"[违规日志] 用户: {event.get_sender_id()} | 群: {event.message_obj.group_id} | "
             f"消息: {message_text[:100]} | LLM原始响应: {llm_response[:50]}"
         )
-        # 如需写入数据库，可使用 self.context.db
 
     async def is_admin(self, event: AstrMessageEvent) -> bool:
-        """检测用户是否为群管理/群主"""
         try:
             group_id = event.message_obj.group_id
             user_id = event.get_sender_id()
