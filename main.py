@@ -10,7 +10,7 @@ class ModerationPlugin(Star):
         super().__init__(context)
 
     # 监听所有群聊消息
-    @filter.on_message()
+    @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_message(self, event: AstrMessageEvent) -> None:
         # 获取插件配置
         enabled = self.get_config().get("enabled", True)
