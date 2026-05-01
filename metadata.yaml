@@ -1,0 +1,23 @@
+name: astrbot_plugin_moderation
+display_name: 消息审核插件
+version: "1.0.0"
+author: "Your Name"
+description: |
+  自动审核聊天内容，使用 LLM 模型判断是否为违禁词/违规内容，并对违规用户执行禁言操作。
+  在管理面板中可配置审核提示词、禁言时长、启用状态等。
+homepage: ""
+tags: ["moderation", "ai", "mute"]
+
+# 声明支持的平台适配器（可根据实际需求修改）
+support_platforms:
+  - aiocqhttp      # QQ (OneBot v11)
+  # - telegram       # Telegram
+  # - qq_official  # QQ 官方机器人
+  # - wecom        # 企业微信
+  # - discord      # Discord
+  # - lark         # 飞书
+  # - dingtalk     # 钉钉
+  # - slack        # Slack
+
+# 要求 AstrBot 版本范围
+astrbot_version: ">=4.16,<5"

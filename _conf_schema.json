@@ -1,0 +1,37 @@
+{
+  "enabled": {
+    "description": "启用消息审核功能",
+    "type": "bool",
+    "default": true
+  },
+  "notify_on_violation": {
+    "description": "禁言时是否在群内发送通知消息",
+    "type": "bool",
+    "default": true
+  },
+  "moderation_prompt": {
+    "description": "审核提示词，用于指示 LLM 判断消息是否违规。模型会返回 1（违规）或 0（不违规）。",
+    "type": "text",
+    "default": "你是一个内容审核助手。请判断以下用户输入的消息是否包含违禁内容（如色情、暴力、政治敏感、辱骂、广告等）。如果消息违规，请只回复数字 '1'；如果消息不违规，请只回复数字 '0'。不要输出任何其他内容。\n\n用户消息：{message}"
+  },
+  "mute_duration": {
+    "description": "禁言时长（秒），设置为 0 表示手动解除前无限期禁言",
+    "type": "int",
+    "default": 600
+  },
+  "log_violations": {
+    "description": "是否记录违规日志",
+    "type": "bool",
+    "default": true
+  },
+  "ignore_bot_self": {
+    "description": "是否忽略机器人自己发送的消息",
+    "type": "bool",
+    "default": true
+  },
+  "ignore_admin": {
+    "description": "是否忽略管理员/群主发送的消息（仅对支持角色检测的平台有效）",
+    "type": "bool",
+    "default": true
+  }
+}
